@@ -2,9 +2,10 @@
 """
 
 import datetime
+import io
+import operator
 import re
 import string
-import typing
 
 import bs4
 import requests
@@ -83,8 +84,10 @@ class Player:
         self._response = requests.get(self.address, headers=HEADERS)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
 
+        self._standard_pitching = StandardPitching(self._soup)
+
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(id={self.id}, name={self.name})"
+        return f"{type(self).__name__}(id={self.id}, meta={self.meta})"
 
     @property
     def id(self) -> str:
@@ -102,91 +105,132 @@ class Player:
     def meta(self) -> pd.Series:
         """
         """
+        element_meta = self._soup.select_one("div#meta > div:nth-child(2)")
+
+        regex_bats = re.compile(r"Bats:\s(Right|Left|Both)")
+        regex_throws = re.compile(r"Throws:\s(Right|Left|Both)")
+        regex_height = re.compile(r"(\d+)-(\d+),\s\d+lb\s\((\d+)cm,\s\d+kg\)")
+        regex_weight = re.compile(r"\d+-\d+,\s(\d+)lb\s\(\d+cm,\s(\d+)kg\)")
+
         return pd.Series(
             {
-                "Name": self.name,
-                "Positions": self.positions,
-                "Bats": self.bats,
-                "Throws": self.throws,
-                "HeightImperial": self.height[0],
-                "HeightSI": self.height[1],
-                "WeightImperial": self.weight[0],
-                "WeightSI": self.weight[1],
-                "Birthdate": self.birthdate,
-                "Country": self.country
+                "Name": element_meta.select_one("h1:first-child").text.strip(),
+                "Positions": "".join(
+                    str(i) for i, x in enumerate(self._positions)
+                    if x in element_meta.text
+                ),
+                "Bats": regex_bats.search(element_meta.text.strip()).group(1),
+                "Throws": regex_throws.search(element_meta.text.strip()).group(1),
+                "HeightImperial": operator.mul(
+                    int(regex_height.search(element_meta.text.strip()).group(1)),
+                    int(regex_height.search(element_meta.text.strip()).group(2))
+                ),
+                "HeightSI": int(regex_height.search(element_meta.text.strip()).group(3)),
+                "WeightImperial": int(regex_weight.search(element_meta.text.strip()).group(1)),
+                "WeightSI": int(regex_weight.search(element_meta.text.strip()).group(2)),
+                "Birthdate": datetime.datetime.strptime(
+                    self._soup.select_one("span#necro-birth").attrs["data-birth"], "%Y-%m-%d"
+                ),
+                "Country": element_meta.select_one(
+                    "p:nth-of-type(4) > span.f-i"
+                ).text.strip().upper()
             }
         )
+    
+    @property
+    def standard_pitching(self) -> "StandardPitching":
+        """
+        """
+        return self._standard_pitching
+
+
+class StandardPitching:
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        self._soup = soup
+        
+        with io.StringIO(str(soup.select_one("table#pitching_standard"))) as buffer:
+            dataframes = pd.read_html(buffer)
+
+        if len(dataframes) != 1:
+            raise ValueError(soup)
+        self._dataframe = dataframes[0].dropna(how="all")
 
     @property
-    def name(self) -> str:
+    def stats(self) -> pd.DataFrame:
         """
         """
-        return self._soup.select_one("div#meta > div > h1:first-child").text.strip()
+        return self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].str.isdecimal(), :
+        ].reset_index(drop=True)
 
     @property
-    def positions(self) -> str:
+    def career_totals(self) -> pd.Series:
         """
         """
-        return "".join(
-            str(i) for i, x in enumerate(self._positions) if x in self._soup.select_one(
-                "div#meta > div"
-            ).text
+        regex = re.compile(r"^(\d+) Yrs?$")
+
+        dataframe = self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None)
+        ].reset_index(drop=True)
+        dataframe.insert(
+            0, "Years", [int(regex.search(x).group(1)) for x in dataframe.loc[:, "Year"]]
         )
+        dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
+
+        series = pd.Series(dataframe.iloc[0, :])
+        series.name = None
+
+        return series
 
     @property
-    def bats(self) -> str:
+    def career_averages(self) -> pd.Series:
         """
         """
-        return re.search(
-            r"Bats:\s(Right|Left|Both)",
-            self._soup.select_one("div#meta > div").text.strip()
-        ).group(1)
+        dataframe = self._dataframe.loc[self._dataframe.loc[:, "Year"] == "162 Game Avg."].drop(
+            columns=["Year", "Age", "Tm", "Lg"]
+        ).reset_index(drop=True)
+
+        series = pd.Series(dataframe.iloc[0, :])
+        series.name = None
+
+        return series
 
     @property
-    def throws(self) -> str:
+    def team_summaries(self) -> pd.DataFrame:
         """
         """
-        return re.search(
-            r"Throws:\s(Right|Left|Both)",
-            self._soup.select_one("div#meta > div").text.strip()
-        ).group(1)
+        regex = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
 
-    @property
-    def height(self) -> typing.Tuple[int, int]:
-        """
-        """
-        foot, inch, _, centimeter, _ = map(
-            int, re.search(
-                r"(\d+)-(\d+),\s(\d+)lb\s\((\d+)cm,\s(\d+)kg\)",
-                self._soup.select_one("div#meta > div").text.strip()
-            ).groups()
+        dataframe = self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None)
+        ].reset_index(drop=True)
+        dataframe.insert(
+            0, "Years", [int(regex.search(x).group(2)) for x in dataframe.loc[:, "Year"]]
         )
-        return 12 * foot + inch, centimeter
-
-    @property
-    def weight(self) -> typing.Tuple[int, int]:
-        """
-        """
-        _, _, pound, _, kilogram = map(
-            int, re.search(
-                r"(\d+)-(\d+),\s(\d+)lb\s\((\d+)cm,\s(\d+)kg\)",
-                self._soup.select_one("div#meta > div").text.strip()
-            ).groups()
+        dataframe.loc[:, "Tm"] = dataframe.loc[:, "Year"].apply(
+            lambda x: regex.search(x).group(1)
         )
-        return pound, kilogram
+        dataframe.drop(columns=["Year", "Age", "Lg"], inplace=True)
+
+        return dataframe
 
     @property
-    def birthdate(self) -> datetime.datetime:
+    def league_summaries(self) -> pd.DataFrame:
         """
         """
-        return datetime.datetime.strptime(
-            self._soup.select_one("span#necro-birth").attrs["data-birth"], "%Y-%m-%d"
+        regex = re.compile(r"^([A-Z]{2}) \((\d+) yrs?\)$")
+
+        dataframe = self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None)
+        ].reset_index(drop=True)
+        dataframe.insert(
+            0, "Years", [int(regex.search(x).group(2)) for x in dataframe.loc[:, "Year"]]
         )
+        dataframe.loc[:, "Lg"] = dataframe.loc[:, "Year"].apply(
+            lambda x: regex.search(x).group(1)
+        )
+        dataframe.drop(columns=["Year", "Age", "Tm"], inplace=True)
 
-    @property
-    def country(self) -> str:
-        """
-        """
-        return self._soup.select_one(
-            "div#meta > div > p:nth-of-type(4) > span.f-i"
-        ).text.strip().upper()
+        return dataframe
