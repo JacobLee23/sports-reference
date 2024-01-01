@@ -15,6 +15,9 @@ class PlayerIndex:
     """
     """
     _address = "https://www.baseball-reference.com/players/{letter}/"
+    _headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
+    }
 
     def __init__(self, letter: str):
         if len(letter) != 1 or letter not in string.ascii_letters:
@@ -24,15 +27,8 @@ class PlayerIndex:
         self._response = requests.get(self.address)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
 
-        self._dataframe = self._scrape()
-
     def __repr__(self) -> str:
         return f"{type(self).__name__}(letter={self.letter})"
-    
-    def __getitem__(self, item: str) -> pd.Series:
-        """
-        """
-        return self.dataframe.loc[:, item]
 
     @property
     def letter(self) -> str:
@@ -46,13 +42,7 @@ class PlayerIndex:
         """
         return self._address.format(letter=self.letter)
     
-    @property
     def dataframe(self) -> pd.DataFrame:
-        """
-        """
-        return self._dataframe
-    
-    def _scrape(self) -> pd.DataFrame:
         """
         """
         container = self._soup.select_one("#div_players_")
