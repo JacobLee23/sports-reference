@@ -24,6 +24,14 @@ class PlayerIndex:
 
         self._dataframe = self._scrape()
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(letter={self.letter})"
+    
+    def __getitem__(self, item: str) -> pd.Series:
+        """
+        """
+        return self.dataframe.loc[:, item]
+
     @property
     def letter(self) -> str:
         """
@@ -53,14 +61,14 @@ class PlayerIndex:
         dataframe = pd.DataFrame(columns=["ID", "Name", "URL", "YearStart", "YearEnd", "Active", "HoF"])
         for i, element in enumerate(container.select("p")):
             href = element.select_one("a").attrs["href"]
-            dataframe.loc[i, :] = [
-                regex_href.search(href).group(1),
-                element.select_one("a").text,
-                href,
-                int(regex_text.search(element.text).group(1)),
-                int(regex_text.search(element.text).group(2)),
-                "+" in element.text,
-                element.select_one("b") is not None
-            ]
+            dataframe.loc[i, :] = {
+                "ID": regex_href.search(href).group(1),
+                "Name": element.select_one("a").text,
+                "URL": href,
+                "YearStart": int(regex_text.search(element.text).group(1)),
+                "YearEnd": int(regex_text.search(element.text).group(2)),
+                "Active": element.select_one("b") is not None,
+                "Hof": "+" in element.text
+            }
 
         return dataframe
