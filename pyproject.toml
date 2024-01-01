@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools > 61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sports-reference"
+version = "0.0.0"
+description = "API wrapper and webscraper for the Sports Reference website."
+readme = "README.md"
+authros = [ { name = "Jacob Lee", email = "Jacob.J.Lee@outlook.com" } ]
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+requires-python = ">= 3.8"
+dependencies = []
+
+[project.urls]
+homepage = "https://github.com/JacobLee23/sports-reference"
+
+[tools.setuptools.packages.find]
+where = ["."]
+include = ["sports_reference*"]
+exclude = []
