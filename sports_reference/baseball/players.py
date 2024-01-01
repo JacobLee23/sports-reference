@@ -10,21 +10,22 @@ import bs4
 import requests
 import pandas as pd
 
+from . import (
+    HEADERS, ROOT
+)
+
 
 class PlayerIndex:
     """
     """
-    _address = "https://www.baseball-reference.com/players/{letter}/"
-    _headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
-    }
+    _address = f"{ROOT}/players/{{letter}}"
 
     def __init__(self, letter: str):
         if len(letter) != 1 or letter not in string.ascii_letters:
             raise ValueError(letter)
         self._letter = letter.lower()
 
-        self._response = requests.get(self.address)
+        self._response = requests.get(self.address, headers=HEADERS)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
 
     def __repr__(self) -> str:
@@ -69,7 +70,7 @@ class PlayerIndex:
 class Player:
     """
     """
-    _address = "https://www.baseball-reference.com/players/{letter}/{id}.shtml"
+    _address = f"{ROOT}/players/{{letter}}/{{id}}.shtml"
 
     _positions = [
         "Designated Hitter", "Pitcher", "Catcher", "First Baseman", "Second Baseman",
@@ -79,7 +80,7 @@ class Player:
     def __init__(self, id: str):
         self._id = id
 
-        self._response = requests.get(self.address)
+        self._response = requests.get(self.address, headers=HEADERS)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
 
     def __repr__(self) -> str:
