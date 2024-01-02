@@ -6,6 +6,7 @@ import io
 import operator
 import re
 import string
+import typing
 
 import bs4
 import requests
@@ -44,6 +45,7 @@ class PlayerIndex:
         """
         return self._address.format(letter=self.letter)
     
+    @property
     def dataframe(self) -> pd.DataFrame:
         """
         """
@@ -84,10 +86,13 @@ class Player:
         self._response = requests.get(self.address, headers=HEADERS)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
 
-        self._standard_pitching = StandardPitching(self._soup)
+        try:
+            self._standard_pitching = StandardPitching(self._soup)
+        except AttributeError:
+            self._standard_pitching = None
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(id={self.id}, meta={self.meta})"
+        return f"{type(self).__name__}(id={self.id}, address={self.address}, meta={self.meta})"
 
     @property
     def id(self) -> str:
@@ -106,6 +111,7 @@ class Player:
         """
         """
         element_meta = self._soup.select_one("div#meta > div:nth-child(2)")
+        text_meta = element_meta.text.strip()
 
         regex_bats = re.compile(r"Bats:\s(Right|Left|Both)")
         regex_throws = re.compile(r"Throws:\s(Right|Left|Both)")
@@ -117,19 +123,19 @@ class Player:
                 "Name": element_meta.select_one("h1:first-child").text.strip(),
                 "Positions": "".join(
                     str(i) for i, x in enumerate(self._positions)
-                    if x in element_meta.text
+                    if x in text_meta
                 ),
-                "Bats": regex_bats.search(element_meta.text.strip()).group(1),
-                "Throws": regex_throws.search(element_meta.text.strip()).group(1),
+                "Bats": regex_bats.search(text_meta).group(1),
+                "Throws": regex_throws.search(text_meta).group(1),
                 "HeightImperial": operator.mul(
-                    int(regex_height.search(element_meta.text.strip()).group(1)),
-                    int(regex_height.search(element_meta.text.strip()).group(2))
+                    int(regex_height.search(text_meta).group(1)),
+                    int(regex_height.search(text_meta).group(2))
                 ),
-                "HeightSI": int(regex_height.search(element_meta.text.strip()).group(3)),
-                "WeightImperial": int(regex_weight.search(element_meta.text.strip()).group(1)),
-                "WeightSI": int(regex_weight.search(element_meta.text.strip()).group(2)),
+                "HeightSI": int(regex_height.search(text_meta).group(3)),
+                "WeightImperial": int(regex_weight.search(text_meta).group(1)),
+                "WeightSI": int(regex_weight.search(text_meta).group(2)),
                 "Birthdate": datetime.datetime.strptime(
-                    self._soup.select_one("span#necro-birth").attrs["data-birth"], "%Y-%m-%d"
+                    element_meta.select_one("span#necro-birth").attrs["data-birth"], "%Y-%m-%d"
                 ),
                 "Country": element_meta.select_one(
                     "p:nth-of-type(4) > span.f-i"
@@ -138,7 +144,7 @@ class Player:
         )
     
     @property
-    def standard_pitching(self) -> "StandardPitching":
+    def standard_pitching(self) -> typing.Optional["StandardPitching"]:
         """
         """
         return self._standard_pitching
@@ -148,21 +154,16 @@ class StandardPitching:
     """
     """
     def __init__(self, soup: bs4.BeautifulSoup):
-        self._soup = soup
-        container = self._soup.select_one("div#all_pitching_standard")
-        try:
-            with io.StringIO(
-                str(container.select_one("table#pitching_standard"))
-            ) as buffer:
-                dataframes = pd.read_html(buffer)
-        except ValueError:
-            with io.StringIO(
-                str(container.find(string=lambda x: isinstance(x, bs4.Comment)))
-            ) as buffer:
-                dataframes = pd.read_html(buffer)
+        container = soup.select_one("div#all_pitching_standard")
+        if (table := container.select_one("table#pitching_standard")) is None:
+            table = container.find(string=lambda x: isinstance(x, bs4.Comment))
 
-        if len(dataframes) != 1:
-            raise ValueError(soup)
+        with io.StringIO(str(table)) as buffer:
+            dataframes = pd.read_html(buffer)
+
+            if len(dataframes) != 1:
+                raise ValueError
+
         self._dataframe = dataframes[0].dropna(how="all")
 
     @property
