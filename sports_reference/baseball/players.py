@@ -149,9 +149,17 @@ class StandardPitching:
     """
     def __init__(self, soup: bs4.BeautifulSoup):
         self._soup = soup
-        
-        with io.StringIO(str(soup.select_one("table#pitching_standard"))) as buffer:
-            dataframes = pd.read_html(buffer)
+        container = self._soup.select_one("div#all_pitching_standard")
+        try:
+            with io.StringIO(
+                str(container.select_one("table#pitching_standard"))
+            ) as buffer:
+                dataframes = pd.read_html(buffer)
+        except ValueError:
+            with io.StringIO(
+                str(container.find(string=lambda x: isinstance(x, bs4.Comment)))
+            ) as buffer:
+                dataframes = pd.read_html(buffer)
 
         if len(dataframes) != 1:
             raise ValueError(soup)
