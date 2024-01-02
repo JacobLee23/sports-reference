@@ -90,13 +90,17 @@ class Player:
 
         try:
             self._standard_batting = StandardBatting(self._soup)
+            self._playervalue_batting = PlayerValueBatting(self._soup)
         except AttributeError:
             self._standard_batting = None
+            self._playervalue_batting = None
 
         try:
             self._standard_pitching = StandardPitching(self._soup)
+            self._playervalue_pitching = PlayerValuePitching(self._soup)
         except AttributeError:
             self._standard_pitching = None
+            self._playervalue_pitching = None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(id={self.id}, address={self.address}, meta={self.meta})"
@@ -157,13 +161,25 @@ class Player:
         return self._standard_batting
 
     @property
+    def playervalue_batting(self) -> typing.Optional["PlayerValueBatting"]:
+        """
+        """
+        return self._playervalue_batting
+
+    @property
     def standard_pitching(self) -> typing.Optional["StandardPitching"]:
         """
         """
         return self._standard_pitching
 
+    @property
+    def playervalue_pitching(self) -> typing.Optional["PlayerValuePitching"]:
+        """
+        """
+        return self._playervalue_pitching
 
-class _Standard:
+
+class _StatTable:
     """
     """
     def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
@@ -183,18 +199,48 @@ class _Standard:
     def stats(self) -> pd.DataFrame:
         """
         """
-        return self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].str.isdecimal(), :
-        ].reset_index(drop=True)
+        return self._stats()
 
     @property
     def career_totals(self) -> pd.Series:
         """
         """
-        regex = re.compile(r"^(\d+) Yrs?$")
+        return self._career_totals()
 
+    @property
+    def career_averages(self) -> pd.Series:
+        """
+        """
+        return self._career_averages()
+
+    @property
+    def team_summaries(self) -> pd.DataFrame:
+        """
+        """
+        return self._team_summaries()
+
+    @property
+    def league_summaries(self) -> pd.DataFrame:
+        """
+        """
+        return self._league_summaries()
+
+    def _stats(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        return self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].str.isdecimal(), :
+        ].reset_index(drop=True)
+
+    def _career_totals(
+        self, regex: re.Pattern = re.compile(r"^(\d+) Yrs?$")
+    ) -> pd.Series:
+        """
+        :return:
+        """
         dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None)
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
         ].reset_index(drop=True)
         dataframe.insert(
             0, "Years", [int(regex.search(x).group(1)) for x in dataframe.loc[:, "Year"]]
@@ -206,27 +252,30 @@ class _Standard:
 
         return series
 
-    @property
-    def career_averages(self) -> pd.Series:
+    def _career_averages(
+        self, regex: re.Pattern = re.compile(r"^162 Game Avg\.$")
+    ) -> pd.Series:
         """
+        :return:
         """
-        dataframe = self._dataframe.loc[self._dataframe.loc[:, "Year"] == "162 Game Avg."].drop(
-            columns=["Year", "Age", "Tm", "Lg"]
-        ).reset_index(drop=True)
+        dataframe = self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
+        ].reset_index(drop=True)
+        dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
 
         series = pd.Series(dataframe.iloc[0, :])
         series.name = None
 
         return series
 
-    @property
-    def team_summaries(self) -> pd.DataFrame:
+    def _team_summaries(
+        self, regex: re.Pattern = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
+    ) -> pd.DataFrame:
         """
+        :return:
         """
-        regex = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
-
         dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None)
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
         ].reset_index(drop=True)
         dataframe.insert(
             0, "Years", [int(regex.search(x).group(2)) for x in dataframe.loc[:, "Year"]]
@@ -238,14 +287,14 @@ class _Standard:
 
         return dataframe
 
-    @property
-    def league_summaries(self) -> pd.DataFrame:
+    def _league_summaries(
+        self, regex: re.Pattern = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
+    ) -> pd.DataFrame:
         """
+        :return:
         """
-        regex = re.compile(r"^([A-Z]{2}) \((\d+) yrs?\)$")
-
         dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None)
+            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
         ].reset_index(drop=True)
         dataframe.insert(
             0, "Years", [int(regex.search(x).group(2)) for x in dataframe.loc[:, "Year"]]
@@ -256,6 +305,26 @@ class _Standard:
         dataframe.drop(columns=["Year", "Age", "Tm"], inplace=True)
 
         return dataframe
+
+
+class _Standard(_StatTable):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
+        super().__init__(soup, css_container, css_table)
+
+
+class _PlayerValue(_StatTable):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
+        super().__init__(soup, css_container, css_table)
+
+    @property
+    def career_totals(self) -> pd.Series:
+        """
+        """
+        return self._career_totals(re.compile(r"^(\d+) Seasons?$")).rename({"Years": "Seasons"})
 
 
 class StandardBatting(_Standard):
@@ -270,3 +339,17 @@ class StandardPitching(_Standard):
     """
     def __init__(self, soup: bs4.BeautifulSoup):
         super().__init__(soup, "div#all_pitching_standard", "table#pitching_standard")
+
+
+class PlayerValueBatting(_PlayerValue):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_batting_value", "table#batting_value")
+
+
+class PlayerValuePitching(_PlayerValue):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_pitching_value", "table#pitching_value")
