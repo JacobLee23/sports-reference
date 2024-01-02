@@ -1,5 +1,5 @@
 """
 """
 
-from .index import player_index
-from .players import Player
+from ._index import player_index
+from ._players import Player

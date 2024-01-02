@@ -10,7 +10,7 @@ import bs4
 import pandas as pd
 import requests
 
-from .overview import (
+from ._overview import (
     StandardBatting, StandardPitching, StandardFielding,
     PlayerValueBatting, PlayerValuePitching
 )
