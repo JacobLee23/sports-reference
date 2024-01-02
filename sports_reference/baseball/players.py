@@ -102,6 +102,11 @@ class Player:
             self._standard_pitching = None
             self._playervalue_pitching = None
 
+        try:
+            self._standard_fielding = StandardFielding(self._soup)
+        except AttributeError:
+            self._standard_fielding = None
+
     def __repr__(self) -> str:
         return f"{type(self).__name__}(id={self.id}, address={self.address}, meta={self.meta})"
 
@@ -178,10 +183,22 @@ class Player:
         """
         return self._playervalue_pitching
 
+    @property
+    def standard_fielding(self) -> typing.Optional["StandardFielding"]:
+        """
+        """
+        return self._standard_fielding
+
 
 class _StatTable:
     """
     """
+    _re_stats = re.compile(r"\d{4}")
+    _re_totals = re.compile(r"^(\d+) (Yr|Season)s?$")
+    _re_averages = re.compile(r"^162 Game Avg\.$")
+    _re_teams = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
+    _re_leagues = re.compile(r"^([A-Z]{2}) \((\d)+ yrs?\)$")
+
     def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
         container = soup.select_one(css_container)
         if (table := container.select_one(css_table)) is None:
@@ -202,107 +219,93 @@ class _StatTable:
         return self._stats()
 
     @property
-    def career_totals(self) -> pd.Series:
+    def totals(self) -> pd.Series:
         """
         """
-        return self._career_totals()
+        return self._totals()
 
     @property
-    def career_averages(self) -> pd.Series:
+    def averages(self) -> pd.Series:
         """
         """
-        return self._career_averages()
+        return self._averages()
 
     @property
-    def team_summaries(self) -> pd.DataFrame:
+    def teams(self) -> pd.DataFrame:
         """
         """
-        return self._team_summaries()
+        return self._teams()
 
     @property
-    def league_summaries(self) -> pd.DataFrame:
+    def leagues(self) -> pd.DataFrame:
         """
         """
-        return self._league_summaries()
+        return self._leagues()
+
+    def _slice_dataframe(self, pattern: re.Pattern) -> pd.DataFrame:
+        """
+        """
+        return self._dataframe.loc[
+            self._dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None), :
+        ].reset_index(drop=True)
 
     def _stats(self) -> pd.DataFrame:
         """
         :return:
         """
-        return self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].str.isdecimal(), :
-        ].reset_index(drop=True)
+        return self._slice_dataframe(self._re_stats)
 
-    def _career_totals(
-        self, regex: re.Pattern = re.compile(r"^(\d+) Yrs?$")
-    ) -> pd.Series:
+    def _totals(self) -> pd.DataFrame:
         """
         :return:
         """
-        dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
-        ].reset_index(drop=True)
-        dataframe.insert(
-            0, "Years", [int(regex.search(x).group(1)) for x in dataframe.loc[:, "Year"]]
+        dataframe = self._slice_dataframe(self._re_totals)
+        seasons = pd.Series(
+            int(self._re_totals.search(x).group(1)) for x in dataframe.loc[:, "Year"]
         )
         dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
-
-        series = pd.Series(dataframe.iloc[0, :])
-        series.name = None
-
-        return series
-
-    def _career_averages(
-        self, regex: re.Pattern = re.compile(r"^162 Game Avg\.$")
-    ) -> pd.Series:
-        """
-        :return:
-        """
-        dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
-        ].reset_index(drop=True)
-        dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
-
-        series = pd.Series(dataframe.iloc[0, :])
-        series.name = None
-
-        return series
-
-    def _team_summaries(
-        self, regex: re.Pattern = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
-    ) -> pd.DataFrame:
-        """
-        :return:
-        """
-        dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
-        ].reset_index(drop=True)
-        dataframe.insert(
-            0, "Years", [int(regex.search(x).group(2)) for x in dataframe.loc[:, "Year"]]
-        )
-        dataframe.loc[:, "Tm"] = dataframe.loc[:, "Year"].apply(
-            lambda x: regex.search(x).group(1)
-        )
-        dataframe.drop(columns=["Year", "Age", "Lg"], inplace=True)
+        dataframe.insert(1, "Seasons", seasons)
 
         return dataframe
 
-    def _league_summaries(
-        self, regex: re.Pattern = re.compile(r"^([A-Z]{3}) \((\d)+ yrs?\)$")
-    ) -> pd.DataFrame:
+    def _averages(self) -> pd.DataFrame:
         """
         :return:
         """
-        dataframe = self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: regex.search(x) is not None), :
-        ].reset_index(drop=True)
-        dataframe.insert(
-            0, "Years", [int(regex.search(x).group(2)) for x in dataframe.loc[:, "Year"]]
+        dataframe = self._slice_dataframe(self._re_averages)
+        dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
+
+        return dataframe
+
+    def _teams(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        dataframe = self._slice_dataframe(self._re_teams)
+        seasons = pd.Series(
+            int(self._re_teams.search(x).group(2)) for x in dataframe.loc[:, "Year"]
+        )
+        dataframe.loc[:, "Tm"] = dataframe.loc[:, "Year"].apply(
+            lambda x: self._re_teams.search(x).group(1)
+        )
+        dataframe.drop(columns=["Year", "Age", "Lg"], inplace=True)
+        dataframe.insert(1, "Seasons", seasons)
+
+        return dataframe
+
+    def _leagues(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        dataframe = self._slice_dataframe(self._re_leagues)
+        seasons = pd.Series(
+            int(self._re_leagues.search(x).group(2)) for x in dataframe.loc[:, "Year"]
         )
         dataframe.loc[:, "Lg"] = dataframe.loc[:, "Year"].apply(
-            lambda x: regex.search(x).group(1)
+            lambda x: self._re_leagues.search(x).group(1)
         )
         dataframe.drop(columns=["Year", "Age", "Tm"], inplace=True)
+        dataframe.insert(1, "Seasons", seasons)
 
         return dataframe
 
@@ -313,6 +316,22 @@ class _Standard(_StatTable):
     def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
         super().__init__(soup, css_container, css_table)
 
+    @property
+    def totals(self) -> pd.Series:
+        """
+        """
+        series = self._totals().iloc[0, :]
+        series.name = None
+        return series
+
+    @property
+    def averages(self) -> pd.Series:
+        """
+        """
+        series = self._averages().iloc[0, :]
+        series.name = None
+        return series
+
 
 class _PlayerValue(_StatTable):
     """
@@ -321,10 +340,20 @@ class _PlayerValue(_StatTable):
         super().__init__(soup, css_container, css_table)
 
     @property
-    def career_totals(self) -> pd.Series:
+    def totals(self) -> pd.Series:
         """
         """
-        return self._career_totals(re.compile(r"^(\d+) Seasons?$")).rename({"Years": "Seasons"})
+        series = self._totals().iloc[0, :]
+        series.name = None
+        return series
+
+    @property
+    def averages(self) -> pd.Series:
+        """
+        """
+        series = self._averages().iloc[0, :]
+        series.name = None
+        return series
 
 
 class StandardBatting(_Standard):
@@ -339,6 +368,23 @@ class StandardPitching(_Standard):
     """
     def __init__(self, soup: bs4.BeautifulSoup):
         super().__init__(soup, "div#all_pitching_standard", "table#pitching_standard")
+
+
+class StandardFielding(_StatTable):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_standard_fielding", "table#standard_fielding")
+
+        self._dataframe = self._dataframe.loc[
+            ~self._dataframe.loc[:, ["Year", "Age", "Tm"]].isna().all(axis=1), :
+        ]
+
+    @property
+    def totals(self) -> pd.DataFrame:
+        """
+        """
+        return self._totals()
 
 
 class PlayerValueBatting(_PlayerValue):
