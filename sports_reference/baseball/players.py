@@ -84,7 +84,14 @@ class Player:
         self._id = id
 
         self._response = requests.get(self.address, headers=HEADERS)
+        if self._response.status_code == 404:
+            raise ValueError(self.id)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
+
+        try:
+            self._standard_batting = StandardBatting(self._soup)
+        except AttributeError:
+            self._standard_batting = None
 
         try:
             self._standard_pitching = StandardPitching(self._soup)
@@ -144,18 +151,24 @@ class Player:
         )
     
     @property
+    def standard_batting(self) -> typing.Optional["StandardBatting"]:
+        """
+        """
+        return self._standard_batting
+
+    @property
     def standard_pitching(self) -> typing.Optional["StandardPitching"]:
         """
         """
         return self._standard_pitching
 
 
-class StandardPitching:
+class _Standard:
     """
     """
-    def __init__(self, soup: bs4.BeautifulSoup):
-        container = soup.select_one("div#all_pitching_standard")
-        if (table := container.select_one("table#pitching_standard")) is None:
+    def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
+        container = soup.select_one(css_container)
+        if (table := container.select_one(css_table)) is None:
             table = container.find(string=lambda x: isinstance(x, bs4.Comment))
 
         with io.StringIO(str(table)) as buffer:
@@ -243,3 +256,17 @@ class StandardPitching:
         dataframe.drop(columns=["Year", "Age", "Tm"], inplace=True)
 
         return dataframe
+
+
+class StandardBatting(_Standard):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_batting_standard", "table#batting_standard")
+
+
+class StandardPitching(_Standard):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_pitching_standard", "table#pitching_standard")
