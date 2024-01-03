@@ -4,16 +4,12 @@
 import datetime
 import operator
 import re
-import typing
 
 import bs4
 import pandas as pd
 import requests
 
-from ._overview import (
-    StandardBatting, StandardPitching, StandardFielding,
-    PlayerValueBatting, PlayerValuePitching
-)
+from ._overview import Overview
 from sports_reference.baseball import (
     HEADERS, ROOT
 )
@@ -37,24 +33,7 @@ class Player:
             raise ValueError(self.id)
         self._soup = bs4.BeautifulSoup(self._response.text, features="lxml")
 
-        try:
-            self._standard_batting = StandardBatting(self._soup)
-            self._playervalue_batting = PlayerValueBatting(self._soup)
-        except AttributeError:
-            self._standard_batting = None
-            self._playervalue_batting = None
-
-        try:
-            self._standard_pitching = StandardPitching(self._soup)
-            self._playervalue_pitching = PlayerValuePitching(self._soup)
-        except AttributeError:
-            self._standard_pitching = None
-            self._playervalue_pitching = None
-
-        try:
-            self._standard_fielding = StandardFielding(self._soup)
-        except AttributeError:
-            self._standard_fielding = None
+        self._overview = Overview(self._soup)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(id={self.id}, address={self.address}, meta={self.meta})"
@@ -109,31 +88,7 @@ class Player:
         )
     
     @property
-    def standard_batting(self) -> typing.Optional[StandardBatting]:
+    def overview(self) -> Overview:
         """
         """
-        return self._standard_batting
-
-    @property
-    def playervalue_batting(self) -> typing.Optional[PlayerValueBatting]:
-        """
-        """
-        return self._playervalue_batting
-
-    @property
-    def standard_pitching(self) -> typing.Optional[StandardPitching]:
-        """
-        """
-        return self._standard_pitching
-
-    @property
-    def playervalue_pitching(self) -> typing.Optional[PlayerValuePitching]:
-        """
-        """
-        return self._playervalue_pitching
-
-    @property
-    def standard_fielding(self) -> typing.Optional[StandardFielding]:
-        """
-        """
-        return self._standard_fielding
+        return self._overview

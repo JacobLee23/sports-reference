@@ -3,9 +3,81 @@
 
 import io
 import re
+import typing
 
 import bs4
+import numpy as np
 import pandas as pd
+
+
+class Overview:
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        try:
+            self._standard_batting = StandardBatting(soup)
+            self._playervalue_batting = PlayerValueBatting(soup)
+            self._advanced_batting = AdvancedBatting(soup)
+        except AttributeError:
+            self._standard_batting = None
+            self._playervalue_batting = None
+            self._advanced_batting = None
+
+        try:
+            self._standard_pitching = StandardPitching(soup)
+            self._playervalue_pitching = PlayerValueBatting(soup)
+            self._advanced_pitching = AdvancedPitching(soup)
+        except AttributeError:
+            self._standard_pitching = None
+            self._playervalue_pitching = None
+            self._advanced_pitching = None
+
+        try:
+            self._standard_fielding = StandardFielding(soup)
+        except AttributeError:
+            self._standard_fielding = None
+
+    @property
+    def standard_batting(self) -> typing.Optional["StandardBatting"]:
+        """
+        """
+        return self._standard_batting
+    
+    @property
+    def playervalue_batting(self) -> typing.Optional["PlayerValueBatting"]:
+        """
+        """
+        return self._playervalue_batting
+    
+    @property
+    def advanced_batting(self) -> typing.Optional["AdvancedBatting"]:
+        """
+        """
+        return self._advanced_batting
+    
+    @property
+    def standard_pitching(self) -> typing.Optional["StandardPitching"]:
+        """
+        """
+        return self._standard_pitching
+    
+    @property
+    def playervalue_pitching(self) -> typing.Optional["PlayerValuePitching"]:
+        """
+        """
+        return self._playervalue_pitching
+    
+    @property
+    def advanced_pitching(self) -> typing.Optional["AdvancedPitching"]:
+        """
+        """
+        return self._advanced_pitching
+    
+    @property
+    def standard_fielding(self) -> typing.Optional["StandardFielding"]:
+        """
+        """
+        return self._standard_fielding
 
 
 class _StatTable:
@@ -51,7 +123,7 @@ class _StatTable:
             int(pattern.search(x).group(1)) for x in dataframe.loc[:, "Year"]
         )
         dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
-        dataframe.insert(1, "Seasons", seasons)
+        dataframe.insert(0, "Seasons", seasons)
 
         return dataframe
 
@@ -109,9 +181,6 @@ class _StatTable:
 class _Standard(_StatTable):
     """
     """
-    def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
-        super().__init__(soup, css_container, css_table)
-
     @property
     def stats(self) -> pd.DataFrame:
         """
@@ -150,9 +219,6 @@ class _Standard(_StatTable):
 class _PlayerValue(_StatTable):
     """
     """
-    def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
-        super().__init__(soup, css_container, css_table)
-    
     @property
     def stats(self) -> pd.DataFrame:
         """
@@ -186,6 +252,52 @@ class _PlayerValue(_StatTable):
         """
         """
         return self._leagues(self._dataframe)
+    
+
+class _Advanced(_StatTable):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
+        super().__init__(soup, css_container, css_table)
+
+        self._columns = pd.MultiIndex.from_tuples(
+            ("Meta", x[1]) if "Unnamed" in x[0] else x for x in self._dataframe.columns
+        )
+        self._dataframe.columns = self._columns
+    
+    @property
+    def stats(self) -> pd.DataFrame:
+        """
+        """
+        dataframe = self._stats(self._dataframe.droplevel(0, axis=1))
+        dataframe.columns = self._dataframe.columns
+        return dataframe
+    
+    @property
+    def totals(self) -> pd.Series:
+        """
+        """
+        colmap = {x[1]: x[0] for x in self._columns}
+        series = self._totals(self._dataframe.droplevel(0, axis=1)).iloc[0, :]
+        series.index = pd.MultiIndex.from_tuples(
+            (colmap.get(x, "Meta"), x) for x in series.index
+        )
+        series.name = None
+        return series
+    
+    @property
+    def averages(self) -> pd.Series:
+        """
+        """
+        colmap = {x[1]: x[0] for x in self._columns}
+        series = self._averages(
+            self._dataframe.droplevel(0, axis=1), re.compile(r"^MLB Averages$")
+        ).iloc[0, :]
+        series.index = pd.MultiIndex.from_tuples(
+            (colmap.get(x, "Meta"), x) for x in series.index
+        )
+        series.name = None
+        return series
 
 
 class StandardBatting(_Standard):
@@ -237,3 +349,17 @@ class PlayerValuePitching(_PlayerValue):
     """
     def __init__(self, soup: bs4.BeautifulSoup):
         super().__init__(soup, "div#all_pitching_value", "table#pitching_value")
+
+
+class AdvancedBatting(_Advanced):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_batting_advanced", "table#batting_advanced")
+
+
+class AdvancedPitching(_Advanced):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        super().__init__(soup, "div#all_pitching_advanced", "table#pitching_advanced")
