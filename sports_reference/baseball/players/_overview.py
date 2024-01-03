@@ -30,36 +30,6 @@ class _StatTable:
 
         self._dataframe = dataframes[0].dropna(how="all")
 
-    @property
-    def stats(self) -> pd.DataFrame:
-        """
-        """
-        return self._stats()
-
-    @property
-    def totals(self) -> pd.Series:
-        """
-        """
-        return self._totals()
-
-    @property
-    def averages(self) -> pd.Series:
-        """
-        """
-        return self._averages()
-
-    @property
-    def teams(self) -> pd.DataFrame:
-        """
-        """
-        return self._teams()
-
-    @property
-    def leagues(self) -> pd.DataFrame:
-        """
-        """
-        return self._leagues()
-
     def _slice_dataframe(self, pattern: re.Pattern) -> pd.DataFrame:
         """
         """
@@ -135,6 +105,12 @@ class _Standard(_StatTable):
         super().__init__(soup, css_container, css_table)
 
     @property
+    def stats(self) -> pd.DataFrame:
+        """
+        """
+        return self._stats()
+
+    @property
     def totals(self) -> pd.Series:
         """
         """
@@ -149,6 +125,18 @@ class _Standard(_StatTable):
         series = self._averages().iloc[0, :]
         series.name = None
         return series
+
+    @property
+    def teams(self) -> pd.DataFrame:
+        """
+        """
+        return self._teams()
+
+    @property
+    def leagues(self) -> pd.DataFrame:
+        """
+        """
+        return self._leagues()
 
 
 class _PlayerValue(_StatTable):
@@ -156,6 +144,12 @@ class _PlayerValue(_StatTable):
     """
     def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
         super().__init__(soup, css_container, css_table)
+    
+    @property
+    def stats(self) -> pd.DataFrame:
+        """
+        """
+        return self._stats()
 
     @property
     def totals(self) -> pd.Series:
@@ -172,6 +166,18 @@ class _PlayerValue(_StatTable):
         series = self._averages().iloc[0, :]
         series.name = None
         return series
+
+    @property
+    def teams(self) -> pd.DataFrame:
+        """
+        """
+        return self._teams()
+
+    @property
+    def leagues(self) -> pd.DataFrame:
+        """
+        """
+        return self._leagues()
 
 
 class StandardBatting(_Standard):
@@ -197,9 +203,15 @@ class StandardFielding(_StatTable):
         self._dataframe = self._dataframe.loc[
             ~self._dataframe.loc[:, ["Year", "Age", "Tm"]].isna().all(axis=1), :
         ]
+    
+    @property
+    def stats(self) -> pd.DataFrame:
+        """
+        """
+        return self._stats()
 
     @property
-    def totals(self) -> pd.DataFrame:
+    def totals(self) -> pd.Series:
         """
         """
         return self._totals()
