@@ -30,67 +30,75 @@ class _StatTable:
 
         self._dataframe = dataframes[0].dropna(how="all")
 
-    def _slice_dataframe(self, pattern: re.Pattern) -> pd.DataFrame:
+    @classmethod
+    def _stats(cls, dataframe: pd.DataFrame, pattern: re.Pattern = _re_stats) -> pd.DataFrame:
         """
+        :return:
         """
-        return self._dataframe.loc[
-            self._dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None), :
+        return dataframe.loc[
+            dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None), :
         ].reset_index(drop=True)
 
-    def _stats(self) -> pd.DataFrame:
+    @classmethod
+    def _totals(cls, dataframe: pd.DataFrame, pattern: re.Pattern = _re_totals) -> pd.DataFrame:
         """
         :return:
         """
-        return self._slice_dataframe(self._re_stats)
-
-    def _totals(self) -> pd.DataFrame:
-        """
-        :return:
-        """
-        dataframe = self._slice_dataframe(self._re_totals)
+        dataframe = dataframe.loc[
+            dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None), :
+        ].reset_index(drop=True)
         seasons = pd.Series(
-            int(self._re_totals.search(x).group(1)) for x in dataframe.loc[:, "Year"]
+            int(pattern.search(x).group(1)) for x in dataframe.loc[:, "Year"]
         )
         dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
         dataframe.insert(1, "Seasons", seasons)
 
         return dataframe
 
-    def _averages(self) -> pd.DataFrame:
+    @classmethod
+    def _averages(cls, dataframe: pd.DataFrame, pattern: re.Pattern = _re_averages) -> pd.DataFrame:
         """
         :return:
         """
-        dataframe = self._slice_dataframe(self._re_averages)
+        dataframe = dataframe.loc[
+            dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None), :
+        ].reset_index(drop=True)
         dataframe.drop(columns=["Year", "Age", "Tm", "Lg"], inplace=True)
 
         return dataframe
 
-    def _teams(self) -> pd.DataFrame:
+    @classmethod
+    def _teams(cls, dataframe: pd.DataFrame, pattern: re.Pattern = _re_teams) -> pd.DataFrame:
         """
         :return:
         """
-        dataframe = self._slice_dataframe(self._re_teams)
+        dataframe = dataframe.loc[
+            dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None), :
+        ].reset_index(drop=True)
         seasons = pd.Series(
-            int(self._re_teams.search(x).group(2)) for x in dataframe.loc[:, "Year"]
+            int(pattern.search(x).group(2)) for x in dataframe.loc[:, "Year"]
         )
         dataframe.loc[:, "Tm"] = dataframe.loc[:, "Year"].apply(
-            lambda x: self._re_teams.search(x).group(1)
+            lambda x: pattern.search(x).group(1)
         )
         dataframe.drop(columns=["Year", "Age", "Lg"], inplace=True)
         dataframe.insert(1, "Seasons", seasons)
 
         return dataframe
 
-    def _leagues(self) -> pd.DataFrame:
+    @classmethod
+    def _leagues(cls, dataframe: pd.DataFrame, pattern: re.Pattern = _re_leagues) -> pd.DataFrame:
         """
         :return:
         """
-        dataframe = self._slice_dataframe(self._re_leagues)
+        dataframe = dataframe.loc[
+            dataframe.loc[:, "Year"].apply(lambda x: pattern.search(x) is not None)
+        ].reset_index(drop=True)
         seasons = pd.Series(
-            int(self._re_leagues.search(x).group(2)) for x in dataframe.loc[:, "Year"]
+            int(pattern.search(x).group(2)) for x in dataframe.loc[:, "Year"]
         )
         dataframe.loc[:, "Lg"] = dataframe.loc[:, "Year"].apply(
-            lambda x: self._re_leagues.search(x).group(1)
+            lambda x: pattern.search(x).group(1)
         )
         dataframe.drop(columns=["Year", "Age", "Tm"], inplace=True)
         dataframe.insert(1, "Seasons", seasons)
@@ -108,13 +116,13 @@ class _Standard(_StatTable):
     def stats(self) -> pd.DataFrame:
         """
         """
-        return self._stats()
+        return self._stats(self._dataframe)
 
     @property
     def totals(self) -> pd.Series:
         """
         """
-        series = self._totals().iloc[0, :]
+        series = self._totals(self._dataframe).iloc[0, :]
         series.name = None
         return series
 
@@ -122,7 +130,7 @@ class _Standard(_StatTable):
     def averages(self) -> pd.Series:
         """
         """
-        series = self._averages().iloc[0, :]
+        series = self._averages(self._dataframe).iloc[0, :]
         series.name = None
         return series
 
@@ -130,13 +138,13 @@ class _Standard(_StatTable):
     def teams(self) -> pd.DataFrame:
         """
         """
-        return self._teams()
+        return self._teams(self._dataframe)
 
     @property
     def leagues(self) -> pd.DataFrame:
         """
         """
-        return self._leagues()
+        return self._leagues(self._dataframe)
 
 
 class _PlayerValue(_StatTable):
@@ -149,13 +157,13 @@ class _PlayerValue(_StatTable):
     def stats(self) -> pd.DataFrame:
         """
         """
-        return self._stats()
+        return self._stats(self._dataframe)
 
     @property
     def totals(self) -> pd.Series:
         """
         """
-        series = self._totals().iloc[0, :]
+        series = self._totals(self._dataframe).iloc[0, :]
         series.name = None
         return series
 
@@ -163,7 +171,7 @@ class _PlayerValue(_StatTable):
     def averages(self) -> pd.Series:
         """
         """
-        series = self._averages().iloc[0, :]
+        series = self._averages(self._dataframe).iloc[0, :]
         series.name = None
         return series
 
@@ -171,13 +179,13 @@ class _PlayerValue(_StatTable):
     def teams(self) -> pd.DataFrame:
         """
         """
-        return self._teams()
+        return self._teams(self._dataframe)
 
     @property
     def leagues(self) -> pd.DataFrame:
         """
         """
-        return self._leagues()
+        return self._leagues(self._dataframe)
 
 
 class StandardBatting(_Standard):
@@ -208,13 +216,13 @@ class StandardFielding(_StatTable):
     def stats(self) -> pd.DataFrame:
         """
         """
-        return self._stats()
+        return self._stats(self._dataframe)
 
     @property
     def totals(self) -> pd.Series:
         """
         """
-        return self._totals()
+        return self._totals(self._dataframe)
 
 
 class PlayerValueBatting(_PlayerValue):
