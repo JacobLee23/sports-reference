@@ -14,6 +14,8 @@ class Overview:
     """
     """
     def __init__(self, soup: bs4.BeautifulSoup):
+        self._soup = soup
+
         try:
             self._standard_batting = StandardBatting(soup)
             self._playervalue_batting = PlayerValueBatting(soup)
@@ -36,6 +38,17 @@ class Overview:
             self._standard_fielding = StandardFielding(soup)
         except AttributeError:
             self._standard_fielding = None
+
+        try:
+            self._projections = Projections(soup)
+        except AttributeError:
+            self._projections = None
+
+    @property
+    def soup(self) -> bs4.BeautifulSoup:
+        """
+        """
+        return self._soup
 
     @property
     def standard_batting(self) -> typing.Optional["StandardBatting"]:
@@ -78,6 +91,12 @@ class Overview:
         """
         """
         return self._standard_fielding
+    
+    @property
+    def projections(self) -> typing.Optional["Projections"]:
+        """
+        """
+        return self._projections
 
 
 class _StatTable:
@@ -90,17 +109,27 @@ class _StatTable:
     _re_leagues = re.compile(r"^([A-Z]{2}) \((\d)+ yrs?\)$")
 
     def __init__(self, soup: bs4.BeautifulSoup, css_container: str, css_table: str):
+        self._soup = soup
+        self._dataframe = self._scrape_table(self.soup, css_container, css_table).dropna(how="all")
+
+    @classmethod
+    def _scrape_table(
+        cls, soup: bs4.BeautifulSoup, css_container: str, css_table: str
+    ) -> pd.DataFrame:
+        """
+        :param soup:
+        :param css_container:
+        :param css_table:
+        :return:
+        """
         container = soup.select_one(css_container)
         if (table := container.select_one(css_table)) is None:
             table = container.find(string=lambda x: isinstance(x, bs4.Comment))
 
         with io.StringIO(str(table)) as buffer:
             dataframes = pd.read_html(buffer)
-
-            if len(dataframes) != 1:
-                raise ValueError
-
-        self._dataframe = dataframes[0].dropna(how="all")
+            
+        return dataframes[0]
 
     @classmethod
     def _stats(cls, dataframe: pd.DataFrame, pattern: re.Pattern = _re_stats) -> pd.DataFrame:
@@ -176,6 +205,12 @@ class _StatTable:
         dataframe.insert(1, "Seasons", seasons)
 
         return dataframe
+    
+    @property
+    def soup(self) -> bs4.BeautifulSoup:
+        """
+        """
+        return self._soup
 
 
 class _Standard(_StatTable):
@@ -363,3 +398,25 @@ class AdvancedPitching(_Advanced):
     """
     def __init__(self, soup: bs4.BeautifulSoup):
         super().__init__(soup, "div#all_pitching_advanced", "table#pitching_advanced")
+
+
+class Projections(_StatTable):
+    """
+    """
+    def __init__(self, soup: bs4.BeautifulSoup):
+        try:
+            super().__init__(soup, "div#all_batting_proj", "table#batting_proj")
+        except AttributeError:
+            super().__init__(soup, "div#all_pitching_proj", "table#pitching_proj")
+
+        self._dataframe.columns = [
+            "".join(filter(lambda c: isinstance(c, str), x)) for x in self._dataframe.columns
+        ]
+
+    @property
+    def stats(self) -> pd.Series:
+        """
+        """
+        series = self._dataframe.iloc[0, :]
+        series.name = None
+        return series
