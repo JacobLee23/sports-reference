@@ -15,9 +15,7 @@ class Team:
         self._container = container
 
     def __repr__(self) -> str:
-        attributes = ("seed", "name", "href", "points", "boxscore", "winner")
-        arguments = ", ".join(f"{k}={getattr(self, k)}" for k in attributes)
-        return f"{type(self).name}({arguments})"
+        return f"{type(self).__name__}(seed={self.seed}, name={self.name}, points={self.points})"
 
     def __str__(self) -> str:
         return f"({self.seed}) {self.name} [{self.points}]"
@@ -47,25 +45,34 @@ class Team:
         return self._container.select_one("a:nth-of-type(1)").attrs["href"]
 
     @property
-    def points(self) -> int:
+    def points(self) -> typing.Optional[int]:
         """
         :return:
         """
-        return int(self._container.select_one("a:nth-of-type(2)").text)
+        try:
+            return int(self._container.select_one("a:nth-of-type(2)").text)
+        except AttributeError:
+            return None
 
     @property
     def boxscore(self) -> str:
         """
         :return:
         """
-        return self._container.select_one("a:nth-of-type(2)").attrs["href"]
+        try:
+            return self._container.select_one("a:nth-of-type(2)").attrs["href"]
+        except AttributeError:
+            return None
 
     @property
     def winner(self) -> bool:
         """
         :return:
         """
-        return "winner" in self._container.attrs["class"]
+        try:
+            return "winner" in self._container.attrs["class"]
+        except KeyError:
+            return False
 
 
 class Game:
@@ -74,27 +81,25 @@ class Game:
     def __init__(self, container: bs4.Tag):
         self._container = container
 
-        self._a = Team(self._container.select_one("div:nth-child(1)"))
-        self._b = Team(self._container.select_one("div:nth-child(2)"))
-
-        if self.a.winner and not self.b.winner:
-            self._winner = self.a
+        elements = self._container.select("div")
+        self._a = Team(elements[0]) if elements[0].select_one("span") is not None else None
+        self._b = Team(elements[1]) if elements[1].select_one("span") is not None else None
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(a={self.a}, b={self.b})"
+        return f"{type(self).__name__}(teams={self.teams}, winner={self.winner.__repr__()})"
 
     def __hash__(self) -> int:
         return hash(frozenset(self.teams))
 
     @property
-    def a(self) -> Team:
+    def a(self) -> typing.Optional[Team]:
         """
         :return:
         """
         return self._a
 
     @property
-    def b(self) -> Team:
+    def b(self) -> typing.Optional[Team]:
         """
         :return:
         """
@@ -105,10 +110,13 @@ class Game:
         """
         :return:
         """
-        if self.a.winner and not self.b.winner:
-            return self.a
-        elif not self.a.winner and self.b.winner:
-            return self.b
+        try:
+            if self.a.winner and not self.b.winner:
+                return self.a
+            if not self.a.winner and self.b.winner:
+                return self.b
+        except AttributeError:
+            return None
 
     @property
     def location(self) -> typing.Tuple[str, str]:
@@ -116,15 +124,18 @@ class Game:
         :return:
         """
         return re.search(
-            r"^at (.*), ([A-Z]{2})$", self._container.select_one("span").text
+            r"^at (.*), ([A-Z]{2})$", self._container.select_one("span:last-child > a").text
         ).groups()
 
     @property
-    def boxscore(self) -> str:
+    def boxscore(self) -> typing.Optional[str]:
         """
         :return:
         """
-        return self._container.select_one("span").attrs["href"]
+        try:
+            return self._container.select_one("span:last-child > a").attrs["href"]
+        except KeyError:
+            return None
 
     @property
     def teams(self) -> typing.Tuple[Team, Team]:
@@ -148,7 +159,10 @@ class Round:
         self._container = container
         self._nround = nround
 
-        self._games = list(map(Game, self._container.select("div")))
+        self._games = list(map(Game, self._container.select("div:has(> div)")))
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(nround={self.nround}, ngames={self.ngames})"
 
     @property
     def nround(self) -> int:
@@ -165,23 +179,34 @@ class Round:
         return self._games
 
     @property
-    def teams(self) -> typing.FrozenSet[Team]:
+    def ngames(self) -> int:
         """
         :return:
         """
-        return frozenset(team for game in self.games for team in game.teams)
+        return len(self.games)
+
+    def teams(self) -> typing.List[Team]:
+        """
+        :return:
+        """
+        return [team for game in self.games for team in game.teams]
 
 
 class Bracket:
     """
     """
     def __init__(self, soup: bs4.BeautifulSoup, region: str):
-        self._container = soup.select_one("#brackets > #{region} > #bracket")
+        self._container = soup.select_one(f"#brackets > #{region} > #bracket")
         self._region = region
 
         self._rounds = {
-            i: Round(e, i) for i, e in enumerate(self._container.select("div.round"), 1)
+            i: Round(e, i) for i, e in enumerate(
+                self._container.select("div.round:not(div:last-child)"), 1
+            )
         }
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(region={self.region}, nrounds={self.nrounds})"
 
     @property
     def region(self) -> str:
@@ -198,18 +223,23 @@ class Bracket:
         return self._rounds
 
     @property
-    def games(self) -> typing.FrozenSet[Game]:
+    def nrounds(self) -> int:
         """
         :return:
         """
-        return frozenset(game for round in self.rounds.values() for game in round.games)
+        return len(self.rounds)
 
-    @property
-    def teams(self) -> typing.FrozenSet[Team]:
+    def games(self) -> typing.Dict[int, typing.List[Game]]:
         """
         :return:
         """
-        return frozenset(team for game in self.games for team in game.teams)
+        return {nround: list(round.games) for nround, round in self.rounds.items()}
+
+    def teams(self) -> typing.Dict[int, typing.List[Team]]:
+        """
+        :return:
+        """
+        return {k: [t for x in v for t in x.teams] for k, v in self.games().items()}
 
 
 class Tournament:
@@ -225,6 +255,14 @@ class Tournament:
 
         self._regions = tuple(e.attrs["id"] for e in self._soup.select("#brackets > div"))
         self._brackets = {x: Bracket(self._soup, x) for x in self.regions}
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(year={self.year}, regions={self.regions})"
+
+    def __getattr__(self, name: str) -> Bracket:
+        if name not in self.regions:
+            raise AttributeError(name)
+        return self.brackets[name]
 
     @property
     def address(self) -> str:
@@ -246,7 +284,7 @@ class Tournament:
         :return:
         """
         return self._regions
-    
+
     @property
     def brackets(self) -> typing.Dict[str, Bracket]:
         """
