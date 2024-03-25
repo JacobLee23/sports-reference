@@ -5,12 +5,16 @@ import re
 import typing
 
 import bs4
+import numpy as np
+import pandas as pd
 import requests
 
 
 class Team:
     """
     """
+    index = pd.Index(["seed", "name", "points", "winner"])
+
     def __init__(self, container: bs4.Tag):
         self._container = container
 
@@ -19,6 +23,24 @@ class Team:
 
     def __str__(self) -> str:
         return f"({self.seed}) {self.name} [{self.points}]"
+
+    def __eq__(self, other: "Team") -> bool:
+        return (self.seed, self.name) == (other.seed, other.name)
+
+    def __ne__(self, other: "Team") -> bool:
+        return (self.seed, self.name) != (other.seed, other.name)
+
+    def __lt__(self, other: "Team") -> bool:
+        return (self.seed, self.name) < (other.seed, other.name)
+
+    def __le__(self, other: "Team") -> bool:
+        return (self.seed, self.name) <= (other.seed, other.name)
+
+    def __gt__(self, other: "Team") -> bool:
+        return (self.seed, self.name) > (other.seed, other.name)
+
+    def __ge__(self, other: "Team") -> bool:
+        return (self.seed, self.name) >= (other.seed, other.name)
 
     def __hash__(self) -> int:
         return hash((self.seed, self.name))
@@ -73,6 +95,12 @@ class Team:
             return "winner" in self._container.attrs["class"]
         except KeyError:
             return False
+
+    def series(self) -> pd.Series:
+        """
+        :return:
+        """
+        return pd.Series({k: getattr(self, k) for k in self.index})
 
 
 class Game:
@@ -151,6 +179,16 @@ class Game:
         """
         return {x: x.points for x in self.teams}
 
+    def dataframe(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        return pd.DataFrame(
+            pd.Series(
+                [None for _ in Team.index], index=Team.index
+            ) if x is None else x.series() for x in self.teams
+        )
+
 
 class Round:
     """
@@ -190,6 +228,15 @@ class Round:
         :return:
         """
         return [team for game in self.games for team in game.teams]
+
+    def dataframe(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        dataframe = pd.concat([x.dataframe() for x in self.games]).reset_index(drop=True)
+        dataframe.insert(0, "game", dataframe.index // 2)
+        dataframe.insert(0, "nround", self.nround)
+        return dataframe
 
 
 class Bracket:
@@ -241,6 +288,16 @@ class Bracket:
         """
         return {k: [t for x in v for t in x.teams] for k, v in self.games().items()}
 
+    def dataframe(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        dataframe = pd.concat(
+            [x.dataframe() for x in self.rounds.values()]
+        ).reset_index(drop=True)
+        dataframe.insert(0, "region", self.region)
+        return dataframe
+
 
 class Tournament:
     """
@@ -291,6 +348,16 @@ class Tournament:
         :return:
         """
         return self._brackets
+
+    def dataframe(self) -> pd.DataFrame:
+        """
+        :return:
+        """
+        dataframe = pd.concat(
+            [x.dataframe() for x in self.brackets.values()]
+        ).reset_index(drop=True)
+        dataframe.insert(0, "year", self.year)
+        return dataframe
 
 
 class MensTournament(Tournament):
