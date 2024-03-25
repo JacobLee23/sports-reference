@@ -1,4 +1,4 @@
 """
 """
 
-from .tournament import MensTournament, WomensTournament
+from ._tournament import MensTournament, WomensTournament

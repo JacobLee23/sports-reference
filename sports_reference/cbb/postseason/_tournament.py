@@ -5,7 +5,6 @@ import re
 import typing
 
 import bs4
-import numpy as np
 import pandas as pd
 import requests
 
@@ -13,7 +12,7 @@ import requests
 class Team:
     """
     """
-    index = pd.Index(["seed", "name", "points", "winner"])
+    index = pd.Index(["seed", "name", "href", "points", "boxscore", "winner"])
 
     def __init__(self, container: bs4.Tag):
         self._container = container
