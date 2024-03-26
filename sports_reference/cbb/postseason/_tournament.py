@@ -5,8 +5,11 @@ import re
 import typing
 
 import bs4
+import numpy as np
 import pandas as pd
 import requests
+
+from sports_reference._binary_tree import BinaryTree, Node
 
 
 class Team:
@@ -14,7 +17,7 @@ class Team:
     """
     index = pd.Index(["seed", "name", "href", "points", "boxscore", "winner"])
 
-    def __init__(self, container: bs4.Tag):
+    def __init__(self, container: typing.Optional[bs4.Tag] = None):
         self._container = container
 
     def __repr__(self) -> str:
@@ -44,25 +47,39 @@ class Team:
     def __hash__(self) -> int:
         return hash((self.seed, self.name))
 
+    @classmethod
+    def node(cls, team: "Team") -> Node:
+        """
+        :param team:
+        :return:
+        """
+        return Node(team)
+
     @property
-    def seed(self) -> int:
+    def seed(self) -> typing.Optional[int]:
         """
         :return:
         """
+        if self._container is None:
+            return None
         return int(self._container.select_one("span").text)
 
     @property
-    def name(self) -> str:
+    def name(self) -> typing.Optional[str]:
         """
         :return:
         """
+        if self._container is None:
+            return None
         return self._container.select_one("a:nth-of-type(1)").text
 
     @property
-    def href(self) -> str:
+    def href(self) -> typing.Optional[str]:
         """
         :return:
         """
+        if self._container is None:
+            return None
         return self._container.select_one("a:nth-of-type(1)").attrs["href"]
 
     @property
@@ -70,26 +87,32 @@ class Team:
         """
         :return:
         """
+        if self._container is None:
+            return None
         try:
             return int(self._container.select_one("a:nth-of-type(2)").text)
         except AttributeError:
             return None
 
     @property
-    def boxscore(self) -> str:
+    def boxscore(self) -> typing.Optional[str]:
         """
         :return:
         """
+        if self._container is None:
+            return None
         try:
             return self._container.select_one("a:nth-of-type(2)").attrs["href"]
         except AttributeError:
             return None
 
     @property
-    def winner(self) -> bool:
+    def winner(self) -> typing.Optional[bool]:
         """
         :return:
         """
+        if self._container is None:
+            return None
         try:
             return "winner" in self._container.attrs["class"]
         except KeyError:
@@ -99,6 +122,8 @@ class Team:
         """
         :return:
         """
+        if self._container is None:
+            return pd.Series([np.nan, "", "", np.nan, "", False], index=self.index)
         return pd.Series({k: getattr(self, k) for k in self.index})
 
 
@@ -109,8 +134,11 @@ class Game:
         self._container = container
 
         elements = self._container.select("div")
-        self._a = Team(elements[0]) if elements[0].select_one("span") is not None else None
-        self._b = Team(elements[1]) if elements[1].select_one("span") is not None else None
+        self._a = Team(elements[0]) if elements[0].select_one("span") is not None else Team()
+        try:
+            self._b = Team(elements[1]) if elements[1].select_one("span") is not None else Team()
+        except IndexError:
+            self._b = None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(teams={self.teams}, winner={self.winner.__repr__()})"
@@ -183,9 +211,7 @@ class Game:
         :return:
         """
         return pd.DataFrame(
-            pd.Series(
-                [None for _ in Team.index], index=Team.index
-            ) if x is None else x.series() for x in self.teams
+            x.series() for x in filter((lambda x: x is not None), self.teams)
         )
 
 
@@ -246,9 +272,7 @@ class Bracket:
         self._region = region
 
         self._rounds = {
-            i: Round(e, i) for i, e in enumerate(
-                self._container.select("div.round:not(div:last-child)"), 1
-            )
+            i: Round(e, i) for i, e in enumerate(self._container.select("div.round"), 1)
         }
 
     def __repr__(self) -> str:
@@ -296,6 +320,19 @@ class Bracket:
         ).reset_index(drop=True)
         dataframe.insert(0, "region", self.region)
         return dataframe
+
+    def binary_tree(self) -> BinaryTree:
+        """
+        :return:
+        """
+        tree = BinaryTree(self.nrounds - 1)
+        teams = {k: [Team.node(x) for x in v] for k, v in self.teams().items()}
+
+        for nlevel, nodes in tree.levels(tree.root).items():
+            for i, node in enumerate(nodes):
+                node.data = teams[self.nrounds - nlevel][i]
+
+        return tree
 
 
 class Tournament:
