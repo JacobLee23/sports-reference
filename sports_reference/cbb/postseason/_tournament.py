@@ -1,6 +1,7 @@
 """
 """
 
+import io
 import re
 import typing
 
@@ -385,7 +386,7 @@ class Tournament:
         """
         return self._brackets
 
-    def dataframe(self) -> pd.DataFrame:
+    def tournament(self) -> pd.DataFrame:
         """
         :return:
         """
@@ -394,6 +395,74 @@ class Tournament:
         ).reset_index(drop=True)
         dataframe.insert(0, "year", self.year)
         return dataframe
+
+    def all_tournament(self) -> typing.Optional[pd.DataFrame]:
+        """
+        :return:
+        """
+        table = self._table("div#all_all_tourney", "table#all_tourney")
+        if table is None:
+            return None
+
+        with io.StringIO(str(table)) as buffer:
+            dataframe = pd.read_html(buffer)[0]
+
+        hrefs = self.table_hrefs(table, dataframe.columns)
+        for label in dataframe.columns:
+            columns = dataframe.columns.to_list()
+            dataframe.insert(
+                columns.index(label) + 1, f"{label} [href]", hrefs.loc[:, label]
+            )
+
+        return dataframe
+
+    def all_region(self) -> typing.Optional[pd.DataFrame]:
+        """
+        :return:
+        """
+        table = self._table("div#all_all-region", "table#all-region")
+        if table is None:
+            return None
+
+        with io.StringIO(str(table)) as buffer:
+            dataframe = pd.read_html(buffer)[0].dropna(axis=1, how="all")
+
+        hrefs = self.table_hrefs(table, dataframe.columns)
+        for label in dataframe.columns:
+            columns = dataframe.columns.to_list()
+            dataframe.insert(
+                columns.index(label) + 1, (label[0], f"{label[1]} [href]"), hrefs.loc[:, label]
+            )
+
+        return dataframe
+
+    def _table(self, css_container: str, css_table: str) -> typing.Optional[pd.DataFrame]:
+        """
+        :param css_container:
+        :param css_table:
+        :return:
+        """
+        try:
+            return bs4.BeautifulSoup(
+                self._soup.select_one(css_container).find(
+                    string=(lambda x: isinstance(x, bs4.Comment))
+                ), features="lxml"
+            ).select_one(css_table)
+        except AttributeError:
+            return None
+
+    def table_hrefs(self, table: bs4.Tag, columns: pd.Index) -> pd.DataFrame:
+        """
+        :param table:
+        :param columns:
+        :return:
+        """
+        return pd.DataFrame(
+            [
+                [a.attrs["href"] for a in tr.select("a")]
+                for tr in table.select("tr:has(a)")
+            ], columns=columns
+        )
 
 
 class MensTournament(Tournament):

@@ -58,10 +58,7 @@ class NCAATournamentHistory:
         :raise ValueError:
         """
         with io.StringIO(str(table)) as buffer:
-            try:
-                dataframe = pd.read_html(buffer)[0]
-            except IndexError as err:
-                raise ValueError from err
+            dataframe = pd.read_html(buffer)[0]
 
         dataframe.insert(
             0, "Year", pd.Series(
