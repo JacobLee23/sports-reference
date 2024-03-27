@@ -8,6 +8,7 @@ beautifulsoup4 = "*"
 requests = "*"
 lxml = "*"
 pandas = "*"
+html5lib = "*"
 
 [dev-packages]
 build = "*"
